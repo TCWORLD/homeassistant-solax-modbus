@@ -118,12 +118,13 @@ The raw value from the inverter is corrected by first adding `measured_power_off
 The calibration values are disabled by default, and the default values (offset = 0, gain = 100%) mean no correction is applied to the value.
 
 To calculate the correct values, you will need a smart meter which provides real-time power information (e.g. with Octopus Home Mini, IHD, or reported values on the meter screen itself).
-1. Find a time when you have a relatively stable import (exact value doesn't matter, but say >> 1kW). Record the power reported by the `measured_power` sensor and the smart meter in Watts, ideally take a few readings over a minute or so and average them.
-2. Find a period of relatively stable export (exact value doesn't matter, but say >> 1kW). Again record the power reported by the `measured_power` sensor and the smart meter in Watts, again ideally take an average.
-3. Calculate the factors for the equation `smart_meter = gain * (measured_power + offset)` where:<br>
-   * `gain` is calculated as `abs(smart_meter {charge} - smart_meter {discharge}) / abs(measured_power {discharge} - measured_power {charge})` <br>
-   * `offset` is then `(smart meter {charge} / gain) - measured_power {charge}`
-4. Enter the `offset` value as calculated (in Watts). Enter the `gain` value multiplied by 100 (as the entity has units of %).
+
+  1. Find a time when you have a relatively stable import (exact value doesn't matter, but say >> 1kW). Record the power reported by the `measured_power` sensor and the smart meter in Watts, ideally take a few readings over a minute or so and average them.
+  2. Find a period of relatively stable export (exact value doesn't matter, but say >> 1kW). Again record the power reported by the `measured_power` sensor and the smart meter in Watts, again ideally take an average.
+  3. Calculate the factors for the equation `smart_meter = gain * (measured_power + offset)` where:<br>
+      * `gain` is calculated as `abs(smart_meter {charge} - smart_meter {discharge}) / abs(measured_power {discharge} - measured_power {charge})` <br>
+      * `offset` is then `(smart meter {charge} / gain) - measured_power {charge}`
+  4. Enter the `offset` value as calculated (in Watts). Enter the `gain` value multiplied by 100 (as the entity has units of %).
 
 Typical offsets will be +/-50W, and gains 90-110%. If you get values outside this range, considered repeating the measurements.
 
