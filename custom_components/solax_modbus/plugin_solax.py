@@ -1959,7 +1959,7 @@ NUMBER_TYPES: Sequence["SolaxModbusNumberEntityDescription"] = [
         native_step=1,
         native_unit_of_measurement=PERCENTAGE,
         allowedtypes=HYBRID | GEN4 | GEN5 | GEN6 | EPS,
-        icon="mdi:battery-charging-",
+        icon="mdi:battery-charging-low",
     ),
     SolaxModbusNumberEntityDescription(
         name="EPS Restart SOC",
