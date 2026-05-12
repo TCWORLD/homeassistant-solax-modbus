@@ -4338,7 +4338,7 @@ SENSOR_TYPES_MAIN: list[SolaXModbusSensorEntityDescription] = [
         name="EPS Restart SOC",
         key="eps_restart_soc",
         native_unit_of_measurement=PERCENTAGE,
-        register=0xB8,
+        register=0xA0,
         allowedtypes=HYBRID | GEN4 | GEN5 | GEN6 | EPS,
         internal=True,
     ),
