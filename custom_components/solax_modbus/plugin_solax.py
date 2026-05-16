@@ -71,6 +71,7 @@ from custom_components.solax_modbus.const import (  # type: ignore[attr-defined]
     value_function_pv_power_total,
     value_function_rtc,
     value_function_sync_rtc,
+    value_int_default,
     value_str_default,
 )
 
@@ -383,7 +384,7 @@ def autorepeat_function_remotecontrol_recompute(initval: int, descr: Any, datadi
 
     # Get power measurements
     measured_power = datadict.get("measured_power", 0)  # Grid power (positive = import, negative = export)
-    battery_capacity = datadict.get("battery_capacity", 0) or 0
+    battery_capacity = value_int_default(datadict.get("battery_capacity"), 0)
     battery_min_soc = datadict.get("selfuse_discharge_min_soc", 10)
 
     # Parallel mode support: Use PM power if in parallel mode and we're the Master
@@ -678,9 +679,7 @@ def autorepeat_bms_charge(datadict: dict[str, Any], battery_capacity: float, max
     bms_cap_w = datadict.get("battery_max_charge_power", None)
     if not isinstance(bms_cap_w, (int, float)) or bms_cap_w <= 0:
         # If not available, try summing individual BMS estimates
-        bms_1_cap_w = datadict.get("bms_max_charge", None) or 0
-        bms_2_cap_w = datadict.get("bms_2_max_charge", None) or 0
-        bms_cap_w = bms_1_cap_w + bms_2_cap_w
+        bms_cap_w = value_int_default(datadict.get("bms_max_charge"), 0) + value_int_default(datadict.get("bms_2_max_charge"), 0)
     if bms_cap_w <= 0:
         # If still not found, failback guess using default voltage and max charge current
         bms_cap_w = datadict.get("battery_charge_max_current", 20) * 360
@@ -734,7 +733,7 @@ def autorepeat_function_powercontrolmode8_recompute(initval: int, descr: Any, da
     min_discharge_soc = max(datadict.get("remotecontrol_minimum_soc_8_9", 10), datadict.get("selfuse_discharge_min_soc", 10))
     # rc_duration = datadict.get("remotecontrol_duration", 20)
     import_limit = datadict.get("remotecontrol_import_limit", 20000)
-    battery_capacity = datadict.get("battery_capacity", 0) or 0
+    battery_capacity = value_int_default(datadict.get("battery_capacity"), 0)
     rc_timeout = datadict.get("remotecontrol_timeout", 2)
     timeout_motion = datadict.get("remotecontrol_timeout_next_motion", "VPP Off")
     pv = datadict.get("pv_power_total", 0)
@@ -766,16 +765,16 @@ def autorepeat_function_powercontrolmode8_recompute(initval: int, descr: Any, da
         max_charge_soc = min(target_soc, datadict.get("battery_charge_upper_soc", 100))
         charge_soc_hysteresis = datadict.get("negative_injection_battery_hysteresis", 2)
         # bias towards import
-        export_target = int(datadict.get("negative_injection_bias_w", -50) or -50)
-        export_deadband_w = int(datadict.get("export_feedback_deadband_w", 50) or 50)
-        pv_unlimited_step = int(datadict.get("pv_unlimited_delta_w", 1000) or 1000)
+        export_target = value_int_default(datadict.get("negative_injection_bias_w"), -50)
+        export_deadband_w = value_int_default(datadict.get("export_feedback_deadband_w"), 50)
+        pv_unlimited_step = value_int_default(datadict.get("pv_unlimited_delta_w"), 1000)
 
         # Local copies
-        battery_charge = max(0, int(datadict.get("battery_power_charge", 0) or 0))
+        battery_charge = max(0, value_int_default(datadict.get("battery_power_charge"), 0))
         pvlimit = setpvlimit
         pv_threshold = pv + pv_unlimited_step  # point at which PV is considered to be not actively limited
-        cur_pvlimit = max(0, setpvlimit if (cur_pvlimit := datadict.get("remotecontrol_current_pv_power_limit", None)) is None else cur_pvlimit)
-        cur_push = (-battery_charge) if (cur_push := datadict.get("remotecontrol_current_pushmode_power", None)) is None else cur_push
+        cur_pvlimit = max(0, value_int_default(datadict.get("remotecontrol_current_pv_power_limit"), setpvlimit))
+        cur_push = value_int_default(datadict.get("remotecontrol_current_pushmode_power"), -battery_charge)
         pushmode_power = 0  # + = discharge, - = charge
         current_charge = -cur_push
 
@@ -787,8 +786,8 @@ def autorepeat_function_powercontrolmode8_recompute(initval: int, descr: Any, da
         )
 
         # Optional probes (if available)
-        measured_power = datadict.get("measured_power", None)
-        _LOGGER.debug(f"[Mode8 Negative Injection] probes: measured_power={measured_power if measured_power is not None else 'n/a'} ")
+        measured_power = value_int_default(datadict.get("measured_power"), 0)
+        _LOGGER.debug(f"[Mode8 Negative Injection] probes: measured_power={measured_power} ")
 
         if pv >= hl or cur_pvlimit < min(setpvlimit, pv_threshold):
             # Surplus or limited pv path: battery is requested to charge at up to the rate
@@ -796,7 +795,6 @@ def autorepeat_function_powercontrolmode8_recompute(initval: int, descr: Any, da
             # Below target: PV should be reduced to prevent export.
             # At/above target: PV can be increased to reduce import in bounded steps.
             # If PV is being actively limited, continue in this loop to release PV restriction slowly.
-            measured_power = int(measured_power or 0)
             surplus = current_charge + measured_power - export_target
             control_state = "surplus" if pv >= hl else "clipping"
 
@@ -868,8 +866,8 @@ def autorepeat_function_powercontrolmode8_recompute(initval: int, descr: Any, da
         # Set maximum charge limit, respecting optional target SoC
         max_charge_soc = min(target_soc, datadict.get("battery_charge_upper_soc", 100))
         # Determine currently requested charge rate to allow filtering
-        battery_charge = max(0, int(datadict.get("battery_power_charge", 0) or 0))
-        cur_push = (-battery_charge) if (cur_push := datadict.get("remotecontrol_current_pushmode_power", None)) is None else cur_push
+        battery_charge = max(0, value_int_default(datadict.get("battery_power_charge"), 0))
+        cur_push = value_int_default(datadict.get("remotecontrol_current_pushmode_power"), -battery_charge)
         current_charge = -cur_push
         # Debug inputs
         _LOGGER.debug(
@@ -959,16 +957,16 @@ def autorepeat_function_powercontrolmode8_recompute(initval: int, descr: Any, da
         max_charge_soc = min(target_soc, datadict.get("battery_charge_upper_soc", 100))
         # Keep a small gap below the inverter's own export cap so our loop does not
         # constantly fight the inverter's internal export limiter.
-        export_margin_w = int(datadict.get("export_first_export_margin_w", 150) or 0)
+        export_margin_w = value_int_default(datadict.get("export_first_export_margin_w"), 150)
         export_limit = datadict.get("export_control_user_limit", 30000)
         inverter_limit = datadict.get("inverter_power_type", 30000)
-        export_deadband_w = int(datadict.get("export_feedback_deadband_w", 50) or 50)
+        export_deadband_w = value_int_default(datadict.get("export_feedback_deadband_w"), 50)
 
         # Local copies
-        battery_charge = max(0, int(datadict.get("battery_power_charge", 0) or 0))
+        battery_charge = max(0, value_int_default(datadict.get("battery_power_charge"), 0))
         pvlimit = setpvlimit
-        cur_pvlimit = max(0, setpvlimit if (cur_pvlimit := datadict.get("remotecontrol_current_pv_power_limit", None)) is None else cur_pvlimit)
-        cur_push = (-battery_charge) if (cur_push := datadict.get("remotecontrol_current_pushmode_power", None)) is None else cur_push
+        cur_pvlimit = max(0, value_int_default(datadict.get("remotecontrol_current_pv_power_limit"), setpvlimit))
+        cur_push = value_int_default(datadict.get("remotecontrol_current_pushmode_power"), -battery_charge)
         pushmode_power = 0  # + = discharge, - = charge
         current_charge = -cur_push
 
@@ -980,13 +978,9 @@ def autorepeat_function_powercontrolmode8_recompute(initval: int, descr: Any, da
         )
 
         # Optional probes (if available)
-        measured_power = datadict.get("measured_power", None)
-        grid_export = datadict.get("grid_export", None)
-        _LOGGER.debug(
-            f"[Mode8 Export-First] probes: "
-            f"measured_power={measured_power if measured_power is not None else 'n/a'} "
-            f"measured_power={grid_export if grid_export is not None else 'n/a'} "
-        )
+        measured_power = value_int_default(datadict.get("measured_power"), 0)
+        grid_export = value_int_default(datadict.get("grid_export"), 0)
+        _LOGGER.debug(f"[Mode8 Export-First] probes: measured_power={measured_power} measured_power={grid_export} ")
 
         if pv >= hl:
             # Surplus path: use measured export as the control signal.
