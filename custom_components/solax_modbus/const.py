@@ -363,7 +363,24 @@ MAX_PVSTRINGS: int = 10
 
 
 def value_str_default(val: Any, default: str) -> str:
+    """Return value as a string if not none, else a default"""
+    # This is useful for dictionary access where a key could exist with
+    # a None value and therefore the default for get() can't be used.
     return str(val) if val is not None else default
+
+
+def value_int_default(val: Any, default: int) -> int:
+    """Return value as an integer if not none, else a default"""
+    # This is useful for dictionary access where a key could exist with
+    # a None value and therefore the default for get() can't be used.
+    return int(val) if val is not None else default
+
+
+def value_float_default(val: Any, default: float) -> float:
+    """Return value as a decimal if not none, else a default"""
+    # This is useful for dictionary access where a key could exist with
+    # a None value and therefore the default for get() can't be used.
+    return float(val) if val is not None else default
 
 
 def value_function_pv_power_total(initval: Any, descr: Any, datadict: dict[str, Any]) -> int | float:
