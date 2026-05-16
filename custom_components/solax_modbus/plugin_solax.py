@@ -69,6 +69,7 @@ from custom_components.solax_modbus.const import (  # type: ignore[attr-defined]
     value_function_pv_power_total,
     value_function_rtc,
     value_function_sync_rtc,
+    value_int_default,
     value_str_default,
 )
 
@@ -661,16 +662,16 @@ def autorepeat_function_powercontrolmode8_recompute(initval: int, descr: Any, da
         max_charge_soc = min(target_soc, datadict.get("battery_charge_upper_soc", 100))
         charge_soc_hysteresis = datadict.get("negative_injection_battery_hysteresis", 2)
         # bias towards import
-        export_target = int(datadict.get("negative_injection_bias_w", -50) or -50)
-        export_deadband_w = int(datadict.get("export_feedback_deadband_w", 50) or 50)
-        pv_unlimited_step = int(datadict.get("pv_unlimited_delta_w", 1000) or 1000)
+        export_target = value_int_default(datadict.get("negative_injection_bias_w"), -50)
+        export_deadband_w = value_int_default(datadict.get("export_feedback_deadband_w"), 50)
+        pv_unlimited_step = value_int_default(datadict.get("pv_unlimited_delta_w"), 1000)
 
         # Local copies
-        battery_charge = max(0, int(datadict.get("battery_power_charge", 0) or 0))
+        battery_charge = max(0, value_int_default(datadict.get("battery_power_charge"), 0))
         pvlimit = setpvlimit
         pv_threshold = pv + pv_unlimited_step  # point at which PV is considered to be not actively limited
-        cur_pvlimit = max(0, setpvlimit if (cur_pvlimit := datadict.get("remotecontrol_current_pv_power_limit", None)) is None else cur_pvlimit)
-        cur_push = (-battery_charge) if (cur_push := datadict.get("remotecontrol_current_pushmode_power", None)) is None else cur_push
+        cur_pvlimit = max(0, value_int_default(datadict.get("remotecontrol_current_pv_power_limit"), setpvlimit))
+        cur_push = value_int_default(datadict.get("remotecontrol_current_pushmode_power"), -battery_charge)
         pushmode_power = 0  # + = discharge, - = charge
         current_charge = -cur_push
 
@@ -682,8 +683,8 @@ def autorepeat_function_powercontrolmode8_recompute(initval: int, descr: Any, da
         )
 
         # Optional probes (if available)
-        measured_power = datadict.get("measured_power", None)
-        _LOGGER.debug(f"[Mode8 Negative Injection] probes: measured_power={measured_power if measured_power is not None else 'n/a'} ")
+        measured_power = value_int_default(datadict.get("measured_power"), 0)
+        _LOGGER.debug(f"[Mode8 Negative Injection] probes: measured_power={measured_power} ")
 
         if pv >= hl or cur_pvlimit < min(setpvlimit, pv_threshold):
             # Surplus or limited pv path: battery is requested to charge at up to the rate
@@ -691,7 +692,6 @@ def autorepeat_function_powercontrolmode8_recompute(initval: int, descr: Any, da
             # Below target: PV should be reduced to prevent export.
             # At/above target: PV can be increased to reduce import in bounded steps.
             # If PV is being actively limited, continue in this loop to release PV restriction slowly.
-            measured_power = int(measured_power or 0)
             surplus = current_charge + measured_power - export_target
             control_state = "surplus" if pv >= hl else "clipping"
 
@@ -763,8 +763,8 @@ def autorepeat_function_powercontrolmode8_recompute(initval: int, descr: Any, da
         # Set maximum charge limit, respecting optional target SoC
         max_charge_soc = min(target_soc, datadict.get("battery_charge_upper_soc", 100))
         # Determine currently requested charge rate to allow filtering
-        battery_charge = max(0, int(datadict.get("battery_power_charge", 0) or 0))
-        cur_push = (-battery_charge) if (cur_push := datadict.get("remotecontrol_current_pushmode_power", None)) is None else cur_push
+        battery_charge = max(0, value_int_default(datadict.get("battery_power_charge"), 0))
+        cur_push = value_int_default(datadict.get("remotecontrol_current_pushmode_power"), -battery_charge)
         current_charge = -cur_push
         # Debug inputs
         _LOGGER.debug(
@@ -852,7 +852,7 @@ def autorepeat_function_powercontrolmode8_recompute(initval: int, descr: Any, da
         # Use the alternative house load basis directly. The current house_load_alt
         # formula already subtracts battery charging, so subtracting it again here
         # would understate the effective load and distort the export target logic.
-        battery_charge = max(0, int(datadict.get("battery_power_charge", 0) or 0))
+        battery_charge = max(0, value_int_default(datadict.get("battery_power_charge"), 0))
         hl = max(0, int(houseload_alt))
 
         # Export limit no readscale:
@@ -867,11 +867,11 @@ def autorepeat_function_powercontrolmode8_recompute(initval: int, descr: Any, da
         max_charge_soc = datadict.get("battery_charge_upper_soc", 100)
         # Keep a small gap below the inverter's own export cap so our loop does not
         # constantly fight the inverter's internal export limiter.
-        export_margin_w = int(datadict.get("export_first_export_margin_w", 150) or 0)
+        export_margin_w = value_int_default(datadict.get("export_first_export_margin_w"), 150)
         export_target = max(0, export_limit - export_margin_w)
-        export_deadband_w = int(datadict.get("export_feedback_deadband_w", 50) or 50)
-        min_step_w = int(datadict.get("export_first_step_min_w", 100) or 100)
-        max_step_w = int(datadict.get("export_feedback_max_w", 500) or 500)
+        export_deadband_w = value_int_default(datadict.get("export_feedback_deadband_w"), 50)
+        min_step_w = value_int_default(datadict.get("export_first_step_min_w"), 100)
+        max_step_w = value_int_default(datadict.get("export_feedback_max_w"), 500)
 
         # Local copies
         pvlimit = max(0, datadict.get("remotecontrol_pv_power_limit", 30000))
@@ -887,15 +887,9 @@ def autorepeat_function_powercontrolmode8_recompute(initval: int, descr: Any, da
         )
 
         # Optional probes (if available)
-        measured_power = datadict.get("measured_power", None)
-        grid_export_s = datadict.get("grid_export", None)
-        grid_import_s = datadict.get("grid_import", None)
-        _LOGGER.debug(
-            "[Mode8 Export-First] probes: "
-            f"measured_power={measured_power if measured_power is not None else 'n/a'} "
-            f"grid_export={grid_export_s if grid_export_s is not None else 'n/a'} "
-            f"grid_import={grid_import_s if grid_import_s is not None else 'n/a'}"
-        )
+        measured_power = value_int_default(datadict.get("measured_power"), 0)
+        measured_export = value_int_default(datadict.get("grid_export"), 0)
+        _LOGGER.debug(f"[Mode8 Export-First] probes: measured_power={measured_power} grid_export={measured_export}")
 
         if pv >= hl:
             # Surplus path: use measured export as the control signal.
@@ -903,7 +897,6 @@ def autorepeat_function_powercontrolmode8_recompute(initval: int, descr: Any, da
             # At/above target: battery can absorb the excess in bounded steps.
             surplus = pv - hl
             current_charge = max(0, -int(last_push))
-            measured_export = int(grid_export_s or 0)
             error = measured_export - export_target
 
             # Extract BMS/user charge caps once; control law below only changes the requested charge.
@@ -948,17 +941,12 @@ def autorepeat_function_powercontrolmode8_recompute(initval: int, descr: Any, da
             _LOGGER.debug(f"[Mode8 Export-First] deficit: deficit={deficit}W soc={battery_capacity}% chosen_push={pushmode_power}W")
 
         # If we still see export while discharging, trim discharge a bit.
-        if pv < hl and pushmode_power > 0:
-            try:
-                measured_export = int(datadict.get("grid_export", 0) or 0)
-            except Exception:
-                measured_export = 0
-            if measured_export > export_deadband_w:
-                nudge = min(measured_export, max_step_w)
-                pushmode_power = max(0, pushmode_power - nudge)
-                _LOGGER.debug(
-                    f"[Mode8 Export-First] discharge feedback: -{nudge}W (measured_export={measured_export}W) to reduce grid export while discharging"
-                )
+        if pv < hl and pushmode_power > 0 and measured_export > export_deadband_w:
+            nudge = min(measured_export, max_step_w)
+            pushmode_power = max(0, pushmode_power - nudge)
+            _LOGGER.debug(
+                f"[Mode8 Export-First] discharge feedback: -{nudge}W (measured_export={measured_export}W) to reduce grid export while discharging"
+            )
 
         # Safety: do not discharge above the instantaneous deficit.
         if pv < hl:
