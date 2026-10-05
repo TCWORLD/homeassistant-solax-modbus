@@ -9958,7 +9958,7 @@ SENSOR_TYPES_MAIN: list[SolaXModbusSensorEntityDescription] = [
         allow_none=True,
         recompute_each_poll=True,
         allowedtypes=AC | HYBRID | GEN4 | GEN5 | GEN6,
-        icon="mdi:solar-power-variant",
+        icon="mdi:battery-charging",
         suggested_display_precision=0,
         entity_registry_enabled_default=False,
     ),
