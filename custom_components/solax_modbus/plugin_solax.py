@@ -4148,6 +4148,7 @@ SENSOR_TYPES_MAIN: list[SolaXModbusSensorEntityDescription] = [
         scale=value_function_disabled_enabled,
         entity_registry_enabled_default=False,
         allowedtypes=HYBRID | GEN4 | GEN5,
+        entity_category=EntityCategory.DIAGNOSTIC,
         icon="mdi:dip-switch",
     ),
     SolaXModbusSensorEntityDescription(
@@ -4194,6 +4195,7 @@ SENSOR_TYPES_MAIN: list[SolaXModbusSensorEntityDescription] = [
             36: "EN50549_Romania",
         },
         entity_registry_enabled_default=False,
+        entity_category=EntityCategory.DIAGNOSTIC,
         allowedtypes=HYBRID | GEN4 | GEN5 | X1,
         icon="mdi:dip-switch",
     ),
@@ -4253,6 +4255,7 @@ SENSOR_TYPES_MAIN: list[SolaXModbusSensorEntityDescription] = [
             48: "LA_3P_220",
         },
         entity_registry_enabled_default=False,
+        entity_category=EntityCategory.DIAGNOSTIC,
         allowedtypes=HYBRID | GEN4 | GEN5 | X3,
         icon="mdi:dip-switch",
     ),
@@ -4782,6 +4785,7 @@ SENSOR_TYPES_MAIN: list[SolaXModbusSensorEntityDescription] = [
         register=0xB5,
         entity_registry_enabled_default=False,
         allowedtypes=AC | HYBRID | GEN2 | GEN3 | GEN4 | GEN5,
+        entity_category=EntityCategory.DIAGNOSTIC,
         icon="mdi:home-export-outline",
     ),
     SolaXModbusSensorEntityDescription(
@@ -4869,6 +4873,7 @@ SENSOR_TYPES_MAIN: list[SolaXModbusSensorEntityDescription] = [
         },
         entity_registry_enabled_default=False,
         allowedtypes=AC | HYBRID,
+        entity_category=EntityCategory.DIAGNOSTIC,
         icon="mdi:translate-variant",
     ),
     SolaXModbusSensorEntityDescription(
