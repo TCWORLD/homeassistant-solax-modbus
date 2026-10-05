@@ -842,17 +842,8 @@ def autorepeat_bms_charge(datadict: dict[str, Any], battery_capacity: float, max
         # for non-ideal charging curves and reduce battery wear
         f = f * (float(chargeable_soc + 2.0) / 6.0)
 
-    # Determine battery max charge power, first from total sensor
-    bms_cap_w = datadict.get("battery_max_charge_power", None)
-    if not isinstance(bms_cap_w, (int, float)) or bms_cap_w <= 0:
-        # If not available, try summing individual BMS estimates
-        bms_1_cap_w = datadict.get("bms_max_charge", None) or 0
-        bms_2_cap_w = datadict.get("bms_2_max_charge", None) or 0
-        bms_cap_w = bms_1_cap_w + bms_2_cap_w
-    if bms_cap_w <= 0:
-        # If still not found, failback guess using default voltage and max charge current
-        bms_cap_w = datadict.get("battery_charge_max_current", 20) * 360
-    bms_cap_w = int(bms_cap_w)
+    # Max charge power for battery
+    bms_cap_w = datadict.get("remotecontrol_bms_cap", 0)
 
     # Cap BMS charge to user defined percentage. f is in range 0-1 so this is always same or lower
     pct_cap_w = int(f * bms_cap_w)
@@ -1740,6 +1731,26 @@ def value_function_bms_2_max_charge(initval: int, descr: Any, datadict: dict[str
             batt_a2 = batt_at / 2
     # Calculate battery 2 max charge power
     return int(batt_v2 * batt_a2)
+
+
+def value_function_remotecontrol_bms_cap(initval: int, descr: Any, datadict: dict[str, Any]) -> int | float:
+    # Determine battery max charge power, first from total sensor
+    bms_cap_w = datadict.get("battery_max_charge_power", None)
+    if not isinstance(bms_cap_w, (int, float)) or bms_cap_w <= 0:
+        # If not available, try summing individual BMS estimates
+        bms_1_cap_w = datadict.get("bms_max_charge", None) or 0
+        bms_2_cap_w = datadict.get("bms_2_max_charge", None) or 0
+        bms_cap_w = bms_1_cap_w + bms_2_cap_w
+    if bms_cap_w <= 0:
+        # If still not found, failback guess using default voltage and max charge current
+        batt_v = (
+            datadict.get("battery_voltage_charge", None) or
+            datadict.get("battery_1_voltage_charge", None) or
+            datadict.get("battery_2_voltage_charge", None) or
+            360
+        )
+        bms_cap_w = datadict.get("battery_charge_max_current", 20) * batt_v
+    return int(bms_cap_w)
 
 
 # ================================= Button Declarations ============================================================
@@ -9950,6 +9961,25 @@ SENSOR_TYPES_MAIN: list[SolaXModbusSensorEntityDescription] = [
         icon="mdi:solar-power-variant",
         suggested_display_precision=0,
         entity_registry_enabled_default=False,
+    ),
+    SolaXModbusSensorEntityDescription(
+        name="Remotecontrol BMS max power (mode 8/9)",
+        key="remotecontrol_bms_cap",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_function=value_function_remotecontrol_bms_cap,
+        depends_on=["battery_max_charge_power"],
+        optional_depends_on=[
+            "bms_max_charge"
+            "bms_2_max_charge"
+            "battery_voltage_charge"
+            "battery_1_voltage_charge"
+            "battery_2_voltage_charge"
+            "battery_charge_max_current"
+        ],
+        allowedtypes=AC | HYBRID | GEN4 | GEN5 | GEN6,
+        icon="mdi:battery-charging",
+        suggested_display_precision=0,
     ),
     SolaXModbusSensorEntityDescription(
         name="Software Version",
