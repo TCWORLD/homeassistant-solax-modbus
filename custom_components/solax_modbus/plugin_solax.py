@@ -1416,17 +1416,32 @@ def value_function_hardware_version_g6(initval: int, descr: Any, datadict: dict[
     return "Gen6"
 
 
+def _house_load_measured_power(datadict: dict[str, Any]) -> tuple[int, int]:
+    """Extract measured power for use in calculating house load"""
+    meter_1_power = int(datadict.get("measured_power", 0))
+    meter_2_power = int(datadict.get("meter_2_measured_power", 0))
+    generator_mode = datadict.get("generator_control", "Disabled")
+    if generator_mode == "Disabled":
+        # When there is no external generator, total power to grid/external is the difference
+        # between meter 1 measured power (to grid) and meter 2 measured power (from external),
+        # while external power is simply meter 2.
+        return (meter_1_power - meter_2_power, meter_2_power)
+    else:
+        # Otherwise meter 1 power is already total power to grid/external, while external power
+        # is difference between meter 1 (total to grid) and meter 2 measured power (from grid)
+        return (meter_1_power, meter_1_power - meter_2_power)
+
+
 def value_function_house_load(initval: int, descr: Any, datadict: dict[str, Any]) -> int | float:
     inverter_power = int(datadict.get("inverter_power", 0))
-    measured_power = int(datadict.get("measured_power", 0))
-    meter_2_power = int(datadict.get("meter_2_measured_power", 0))
-    result = inverter_power - measured_power + meter_2_power
+    [measured_power, external_power] = _house_load_measured_power(datadict)
+    result = inverter_power - measured_power
 
     _LOGGER.debug(
-        "[HOUSE_LOAD] Calculation: inverter_power=%sW measured_power=%sW meter_2_power=%sW result=%sW meter_1_direction=%s",
+        "[HOUSE_LOAD] Calculation: inverter_power=%sW measured_power=%sW external_power=%sW result=%sW meter_1_direction=%s",
         inverter_power,
         measured_power,
-        meter_2_power,
+        external_power,
         result,
         datadict.get("meter_1_direction", "unknown"),
     )
@@ -1435,12 +1450,8 @@ def value_function_house_load(initval: int, descr: Any, datadict: dict[str, Any]
 
 
 def value_function_house_load_alt(initval: int, descr: Any, datadict: dict[str, Any]) -> int | float:
-    return int(
-        datadict.get("pv_power_total", 0)
-        - datadict.get("battery_power_charge", 0)
-        - datadict.get("measured_power", 0)
-        + datadict.get("meter_2_measured_power", 0)
-    )
+    [measured_power, _external_power] = _house_load_measured_power(datadict)
+    return int(datadict.get("pv_power_total", 0) - datadict.get("battery_power_charge", 0) - measured_power)
 
 
 def value_function_inverter_power_g5(initval: int, descr: Any, datadict: dict[str, Any]) -> int | float:
@@ -9940,7 +9951,7 @@ SENSOR_TYPES_MAIN: list[SolaXModbusSensorEntityDescription] = [
         key="house_load",
         value_function=value_function_house_load,
         depends_on=["inverter_power", "measured_power"],
-        optional_depends_on=["meter_2_measured_power"],
+        optional_depends_on=["meter_2_measured_power", "generator_control"],
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -10009,7 +10020,7 @@ SENSOR_TYPES_MAIN: list[SolaXModbusSensorEntityDescription] = [
             "battery_power_charge",
             "measured_power",
         ],
-        optional_depends_on=["meter_2_measured_power"],
+        optional_depends_on=["meter_2_measured_power", "generator_control"],
         icon="mdi:home-lightning-bolt",
     ),
     SolaXModbusSensorEntityDescription(
