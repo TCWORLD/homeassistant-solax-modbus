@@ -1442,6 +1442,13 @@ class SolaXModbusHub:
         # Keep freshness local to this interval refresh, never to the hub or device.
         cycle_fresh_keys: set[str] = set()
         cycle_computed_keys: set[str] = set()
+
+        # External measurements must be fresh *before* computed sensors are evaluated
+        # to allow an external source to override a register backed sensor.
+        async with self._poll_data_lock:
+            cycle_fresh_keys.update(self.apply_external_overrides(self.data, getattr(interval_group, "interval", None)))
+
+        # Read in modbus register data for all device groups
         for group in list(interval_group.device_groups.values()):
             group.computed_interval = getattr(interval_group, "interval", None)
             group.defer_computed_updates = True
@@ -1469,9 +1476,6 @@ class SolaXModbusHub:
         # controlling; do not replace another interval's in-flight observations.
         async with self._poll_data_lock:
             self._pending_input_observations = self._input_observations(include_pending=False).copy()
-            # External measurements must be fresh *before* computed sensors like house_load are
-            # evaluated, otherwise the control loop would act on a one-cycle-old measurement.
-            cycle_fresh_keys.update(self.apply_external_overrides(self.data, getattr(interval_group, "interval", None)))
             try:
                 cycle_computed_keys.update(self._compute_poll_sensors(self.data, cycle_fresh_keys, getattr(interval_group, "interval", None)))
                 self._computed_input_observations = self._pending_input_observations
@@ -2005,7 +2009,7 @@ class SolaXModbusHub:
         advance: bool = True,
         fresh_keys: set[str] | None = None,
     ) -> int:
-        return_value: int | None = None
+        return_value: float | int | None = None
         read_scale = descr.read_scale  # read scale might still be wrong the first polling cycle
         order32 = getattr(descr, "order32", None) or self.plugin.order32
         val = None
@@ -2085,57 +2089,67 @@ class SolaXModbusHub:
                 self.tmpdata_expiry[descr.key] = 0 # update locals only once
         """
 
-        # Plugin-level validation hook
-        if self._validate_register_func is not None:
-            val = self._validate_register_func(descr, val, data)
+        # If we have an external override option which has a valid value, use that instead of the
+        # modbus register value
+        if (descr.external_override is not None) and (external := data.get(descr.external_override) is not None):
+            _LOGGER.debug("Using external sensor: %s = %s", descr.external_override, external)
+            return_value = float(external)
+        else:
+            # Otherwise process the sensor value
 
-        if isinstance(val, list) and descr.register_data_type != REGISTER_WORDS:
-            if self.cyclecount < VERBOSE_CYCLES:
-                _LOGGER.warning("%s: invalid list value for numeric entity %s: %s - setting value to None", self._name, descr.key, val)
-            val = None
+            # Plugin-level validation hook
+            if self._validate_register_func is not None:
+                val = self._validate_register_func(descr, val, data)
 
-        if val is None:  # E.g. if errors have occurred during readout
-            # _LOGGER.warning(f"****tmp*** treating {descr.key} failed")
-            return_value = None
-        elif type(descr.scale) is dict:  # translate int to string
-            # None publishes HA's unknown state without inventing an invalid enum option.
-            return_value = descr.scale.get(val)
-        elif callable(descr.scale):  # function to call ?
-            return_value = descr.scale(val, descr, data)
-        else:  # apply simple numeric scaling and rounding if not a list of words
-            try:
-                return_value = round(val * descr.scale * read_scale, descr.rounding)
-                if descr.rounding == 0:
-                    return_value = int(return_value)
-            except Exception:
-                return_value = val  # probably a REGISTER_WORDS instance
-            native_unit = getattr(descr, "native_unit_of_measurement", None)
-            if native_unit == UnitOfFrequency.HERTZ:
-                min_val = getattr(descr, "min_value", 20)
-                max_val = getattr(descr, "max_value", 80)
-            if native_unit == PERCENTAGE:
-                min_val = getattr(descr, "min_value", 0)
-                max_val = getattr(descr, "max_value", 100)
-            elif native_unit == UnitOfTemperature.CELSIUS:
-                min_val = getattr(descr, "min_value", -100)
-                max_val = getattr(descr, "max_value", 200)
-            elif native_unit == UnitOfPower.KILO_WATT:
-                min_val = getattr(descr, "min_value", -self.inverterPowerKw * 2)
-                max_val = getattr(descr, "max_value", +self.inverterPowerKw * 2)
-            elif native_unit == UnitOfElectricCurrent.AMPERE:
-                min_val = getattr(descr, "min_value", -self.inverterPowerKw * 2)
-                max_val = getattr(descr, "max_value", +self.inverterPowerKw * 2)
-            elif native_unit == UnitOfElectricPotential.VOLT:
-                min_val = getattr(descr, "min_value", 0)
-                max_val = getattr(descr, "max_value", 2000)
-            else:
-                min_val = getattr(descr, "min_value", None)
-                max_val = getattr(descr, "max_value", None)
+            if isinstance(val, list) and descr.register_data_type != REGISTER_WORDS:
+                if self.cyclecount < VERBOSE_CYCLES:
+                    _LOGGER.warning("%s: invalid list value for numeric entity %s: %s - setting value to None", self._name, descr.key, val)
+                val = None
 
-            if min_val is not None and return_value < min_val:
-                raise ModbusIOException(f"Value {return_value} of '{descr.key}' lower than {min_val}")  # type: ignore[no-untyped-call]
-            if max_val is not None and return_value > max_val:
-                raise ModbusIOException(f"Value {return_value} of '{descr.key}' greater than {max_val}")  # type: ignore[no-untyped-call]
+            if val is None:  # E.g. if errors have occurred during readout
+                # _LOGGER.warning(f"****tmp*** treating {descr.key} failed")
+                return_value = None
+            elif type(descr.scale) is dict:  # translate int to string
+                # None publishes HA's unknown state without inventing an invalid enum option.
+                return_value = descr.scale.get(val)
+                if return_value is None:
+                    _LOGGER.debug("%s: Value %d for key %d could not be mapped to a known state.", self._name, val, descr.key)
+            elif callable(descr.scale):  # function to call ?
+                return_value = descr.scale(val, descr, data)
+            else:  # apply simple numeric scaling and rounding if not a list of words
+                try:
+                    return_value = round(val * descr.scale * read_scale, descr.rounding)
+                    if descr.rounding == 0:
+                        return_value = int(return_value)
+                except Exception:
+                    return_value = val  # probably a REGISTER_WORDS instance
+                native_unit = getattr(descr, "native_unit_of_measurement", None)
+                if native_unit == UnitOfFrequency.HERTZ:
+                    min_val = getattr(descr, "min_value", 20)
+                    max_val = getattr(descr, "max_value", 80)
+                if native_unit == PERCENTAGE:
+                    min_val = getattr(descr, "min_value", 0)
+                    max_val = getattr(descr, "max_value", 100)
+                elif native_unit == UnitOfTemperature.CELSIUS:
+                    min_val = getattr(descr, "min_value", -100)
+                    max_val = getattr(descr, "max_value", 200)
+                elif native_unit == UnitOfPower.KILO_WATT:
+                    min_val = getattr(descr, "min_value", -self.inverterPowerKw * 2)
+                    max_val = getattr(descr, "max_value", +self.inverterPowerKw * 2)
+                elif native_unit == UnitOfElectricCurrent.AMPERE:
+                    min_val = getattr(descr, "min_value", -self.inverterPowerKw * 2)
+                    max_val = getattr(descr, "max_value", +self.inverterPowerKw * 2)
+                elif native_unit == UnitOfElectricPotential.VOLT:
+                    min_val = getattr(descr, "min_value", 0)
+                    max_val = getattr(descr, "max_value", 2000)
+                else:
+                    min_val = getattr(descr, "min_value", None)
+                    max_val = getattr(descr, "max_value", None)
+
+                if min_val is not None and return_value < min_val:
+                    raise ModbusIOException(f"Value {return_value} of '{descr.key}' lower than {min_val}")  # type: ignore[no-untyped-call]
+                if max_val is not None and return_value > max_val:
+                    raise ModbusIOException(f"Value {return_value} of '{descr.key}' greater than {max_val}")  # type: ignore[no-untyped-call]
         # if (descr.sleepmode != SLEEPMODE_LASTAWAKE) or self.awakeplugin(self.data): self.data[descr.key] = return_value
         if (
             (self.tmpdata_expiry.get(descr.key, 0) == 0)

@@ -2545,7 +2545,7 @@ NUMBER_TYPES: Sequence["SolaxModbusNumberEntityDescription"] = [
     SolaxModbusNumberEntityDescription(
         name="Config Measured Power Offset",
         key="measured_power_offset",
-        allowedtypes=AC | HYBRID,
+        allowedtypes=AC | HYBRID | MIC,
         native_min_value=-200,
         native_max_value=200,
         native_step=0.5,
@@ -2558,7 +2558,7 @@ NUMBER_TYPES: Sequence["SolaxModbusNumberEntityDescription"] = [
     SolaxModbusNumberEntityDescription(
         name="Config Measured Power Gain",
         key="measured_power_gain",
-        allowedtypes=AC | HYBRID,
+        allowedtypes=AC | HYBRID | MIC,
         native_min_value=90,  # Allow correction up to +/-10%.
         native_max_value=110,
         native_step=0.1,
@@ -4002,6 +4002,18 @@ SELECT_TYPES: Sequence["SolaxModbusSelectEntityDescription"] = [
         entity_category=EntityCategory.CONFIG,
         icon="mdi:home-lightning-bolt-outline",
         allowedtypes=AC | HYBRID | GEN4 | GEN5 | GEN6,
+        # option_dict stays None: options come from the entity registry at runtime
+    ),
+    SolaxModbusSelectEntityDescription(
+        name="External Measured Power Source",
+        key="external_measured_power_source",
+        write_method=WRITE_DATA_LOCAL,
+        initvalue=None,  # empty = no source, derived value used
+        dynamic_options=True,
+        dynamic_device_class=SensorDeviceClass.POWER,
+        entity_category=EntityCategory.CONFIG,
+        icon="mdi:home-lightning-bolt-outline",
+        allowedtypes=AC | HYBRID | MIC,
         # option_dict stays None: options come from the entity registry at runtime
     ),
     ###
@@ -5586,7 +5598,7 @@ SENSOR_TYPES_MAIN: list[SolaXModbusSensorEntityDescription] = [
             1: "CT",
         },
         entity_registry_enabled_default=False,
-        allowedtypes=HYBRID | GEN3 | GEN4 | GEN5,
+        allowedtypes=HYBRID | GEN3 | GEN4 | GEN5 | GEN6,
         entity_category=EntityCategory.DIAGNOSTIC,
         icon="mdi:meter-electric",
     ),
@@ -7616,8 +7628,9 @@ SENSOR_TYPES_MAIN: list[SolaXModbusSensorEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         register=0x46,
         register_type=REG_INPUT,
-        scale=value_function_gain_offset,
         register_data_type=REGISTER_S32,
+        external_override="external_measured_power",
+        scale=value_function_gain_offset,
         allowedtypes=AC | HYBRID,
     ),
     SolaXModbusSensorEntityDescription(
@@ -10983,7 +10996,8 @@ SENSOR_TYPES_MAIN: list[SolaXModbusSensorEntityDescription] = [
         register=0x435,
         register_type=REG_INPUT,
         register_data_type=REGISTER_S32,
-        entity_registry_enabled_default=False,
+        external_override="external_measured_power",
+        scale=value_function_gain_offset,
         allowedtypes=MIC | GEN,
         icon="mdi:solar-power-variant",
     ),
@@ -11056,6 +11070,8 @@ SENSOR_TYPES_MAIN: list[SolaXModbusSensorEntityDescription] = [
         register=0x43B,
         register_type=REG_INPUT,
         register_data_type=REGISTER_S32,
+        external_override="external_measured_power",
+        scale=value_function_gain_offset,
         allowedtypes=MIC | GEN2,
         icon="mdi:solar-power-variant",
     ),
@@ -11337,7 +11353,8 @@ SENSOR_TYPES_MAIN: list[SolaXModbusSensorEntityDescription] = [
         register=0x431,
         register_type=REG_INPUT,
         register_data_type=REGISTER_S16,
-        entity_registry_enabled_default=False,
+        external_override="external_measured_power",
+        scale=value_function_gain_offset,
         allowedtypes=MIC | GEN3,
         icon="mdi:solar-power-variant",
     ),
@@ -11709,6 +11726,8 @@ SENSOR_TYPES_MAIN: list[SolaXModbusSensorEntityDescription] = [
         register=0x408,
         register_type=REG_INPUT,
         register_data_type=REGISTER_S16,
+        external_override="external_measured_power",
+        scale=value_function_gain_offset,
         allowedtypes=MIC | GEN4,
     ),
     SolaXModbusSensorEntityDescription(
@@ -13607,6 +13626,7 @@ ENERGY_DASHBOARD_MAPPING = EnergyDashboardMapping(
 
 EXTERNAL_SOURCE_TYPES: dict[str, UnitOfPower | None] = {
     "house_load": UnitOfPower.WATT,
+    "measured_power": UnitOfPower.WATT,
 }
 
 plugin_instance = solax_plugin(
