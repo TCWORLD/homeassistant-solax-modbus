@@ -1104,18 +1104,20 @@ def entityToListSingle(
                 hub.entity_dependencies.setdefault(dep_on, []).append(newdescr.key)  # can be more than one
     # internal sensors are only used for polling values for selects, etc
     if not getattr(newdescr, "internal", None):
+        # Not an internal sensor, add to the real entities
         entities.append(sensor)
     if newdescr.sleepmode == SLEEPMODE_NONE:
         hub.sleepnone.append(newdescr.key)
     if newdescr.sleepmode == SLEEPMODE_ZERO:
         hub.sleepzero.append(newdescr.key)
-    if newdescr.register < 0:  # entity without modbus address
+    if newdescr.register < 0:
+        # Entities which are computed have no real modbus address
         if newdescr.value_function and newdescr.internal:
             computedRegs[newdescr.key] = newdescr
         elif not newdescr.value_function and is_entity_enabled(hub._hass, hub, newdescr, use_default=True, platform_name=hub_name):
             _LOGGER.warning("%s: entity without modbus register address and without value_function found: %s", hub_name, newdescr.key)
     else:
-        # target group
+        # Otherwise a real modbus register
         interval_group = groups.setdefault(hub.scan_group(sensor), empty_input_interval_group_lambda())
         device_group_key = hub.device_group_key(device_info)
         device_group = interval_group.device_groups.setdefault(device_group_key, empty_input_device_group_lambda())
